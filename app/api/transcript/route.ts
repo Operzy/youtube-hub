@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { ApifyClient } from 'apify-client'
+import { getAuthUser, unauthorized } from '@/lib/auth'
+import { rateLimit, rateLimitResponse } from '@/lib/rate-limit'
 
 const client = new ApifyClient({ token: process.env.APIFY_TOKEN })
 
@@ -19,6 +21,12 @@ function extractText(val: unknown): string | null {
 }
 
 export async function POST(req: NextRequest) {
+  const user = await getAuthUser(req)
+  if (!user) return unauthorized()
+
+  const { ok } = rateLimit(user.id)
+  if (!ok) return rateLimitResponse()
+
   const { videoUrl } = await req.json()
 
   if (!videoUrl || typeof videoUrl !== 'string') {

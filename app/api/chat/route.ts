@@ -1,5 +1,8 @@
 import { NextRequest } from 'next/server'
 import Anthropic from '@anthropic-ai/sdk'
+import { getAuthUser, unauthorized } from '@/lib/auth'
+import { rateLimit, rateLimitResponse } from '@/lib/rate-limit'
+import { SYSTEM_PROMPTS } from '@/lib/prompts'
 
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 
@@ -11,10 +14,24 @@ export async function POST(req: NextRequest) {
     })
   }
 
-  const { messages, systemPrompt } = await req.json()
+  const user = await getAuthUser(req)
+  if (!user) return unauthorized()
+
+  const { ok } = rateLimit(user.id)
+  if (!ok) return rateLimitResponse()
+
+  const { messages, promptType } = await req.json()
 
   if (!messages?.length) {
     return new Response(JSON.stringify({ error: 'messages are required' }), {
+      status: 400,
+      headers: { 'Content-Type': 'application/json' },
+    })
+  }
+
+  const systemPrompt = SYSTEM_PROMPTS[promptType]
+  if (!systemPrompt) {
+    return new Response(JSON.stringify({ error: 'Invalid promptType' }), {
       status: 400,
       headers: { 'Content-Type': 'application/json' },
     })

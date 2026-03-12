@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect } from 'react'
 import { SavedVideo, ContentProject, CalendarEntry, CalendarStatus } from '@/types/youtube'
+import { authFetch } from '@/lib/api-client'
 
 type Step = 'select' | 'transcript' | 'analyze' | 'script' | 'presentation' | 'titles' | 'finish'
 
@@ -70,9 +71,8 @@ export default function CreatorHub({ saved, onSaveProject, onAddToCalendar, pend
       // Auto-fetch transcript
       setLoading(true)
       setError('')
-      fetch('/api/transcript', {
+      authFetch('/api/transcript', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ videoUrl: pendingVideo.url }),
       })
         .then(res => res.json())
@@ -88,16 +88,18 @@ export default function CreatorHub({ saved, onSaveProject, onAddToCalendar, pend
 
   // ── helpers ──
 
-  async function streamChat(systemPrompt: string, userMessage: string): Promise<string> {
-    const res = await fetch('/api/chat', {
+  async function streamChat(promptType: string, userMessage: string): Promise<string> {
+    const res = await authFetch('/api/chat', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        systemPrompt,
+        promptType,
         messages: [{ role: 'user', content: userMessage }],
       }),
     })
-    if (!res.ok) throw new Error('AI request failed')
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({ error: 'AI request failed' }))
+      throw new Error(data.error || 'AI request failed')
+    }
     return res.text()
   }
 
@@ -106,9 +108,8 @@ export default function CreatorHub({ saved, onSaveProject, onAddToCalendar, pend
     setLoading(true)
     setError('')
     try {
-      const res = await fetch('/api/transcript', {
+      const res = await authFetch('/api/transcript', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ videoUrl }),
       })
       const data = await res.json()
@@ -129,11 +130,11 @@ export default function CreatorHub({ saved, onSaveProject, onAddToCalendar, pend
       // Run both requests in parallel: detailed analysis + structured scores
       const [analysisResult, scoresResult] = await Promise.all([
         streamChat(
-          'You are a YouTube content strategist specializing in credit repair, business funding, finance, and coaching niches. Analyze videos in detail.',
+          'analyze',
           `Analyze this YouTube video transcript. Break down:\n\n1. **Hook** (first 30 seconds) — what grabbed attention?\n2. **Structure** — how was the content organized?\n3. **Key Points** — main topics covered\n4. **CTAs** — calls to action used\n5. **Pacing** — how did energy/tempo flow?\n6. **What Made It Work** — why this video performed\n7. **Gaps/Opportunities** — what could be improved or expanded on\n\nVideo: "${videoTitle}"\n\nTranscript:\n${transcript.slice(0, 8000)}`
         ),
         streamChat(
-          'You are a YouTube video scoring engine. Return ONLY valid JSON, no markdown, no explanation. Score each element from 1-10.',
+          'score',
           `Score this YouTube video transcript on each element. Return a JSON array with exactly this structure:
 [
   {"label": "Hook", "score": <1-10>, "summary": "<one sentence on what was done>", "improvements": ["<specific improvement 1>", "<specific improvement 2>", "<specific improvement 3>"]},
@@ -179,7 +180,7 @@ Video: "${videoTitle}"\n\nTranscript:\n${transcript.slice(0, 6000)}`
     setError('')
     try {
       const result = await streamChat(
-        'You are a YouTube script writer for Credit Coach Q, a credit repair, business funding, and financial coaching channel. Write engaging, conversational scripts that hook viewers immediately. Use a confident, educational but approachable tone.',
+        'script',
         `Write a complete YouTube script for Credit Coach Q on the topic: "${myTopic}"\n\nUse insights from this analysis of a reference video:\n${analysis.slice(0, 4000)}\n\nThe script should include:\n- A strong hook (first 15 seconds)\n- Clear intro with topic preview\n- 3-5 main sections with transitions\n- Engagement prompts (like, subscribe, comment)\n- Strong closing CTA\n- Approximate timestamps\n\nFormat it clearly with section headers and speaker directions in [brackets].`
       )
       setScript(result)
@@ -196,7 +197,7 @@ Video: "${videoTitle}"\n\nTranscript:\n${transcript.slice(0, 6000)}`
     setError('')
     try {
       const result = await streamChat(
-        `You are a presentation designer. Generate a complete, self-contained HTML file for a slide presentation. The HTML must include all CSS inline. Use a modern, clean design with a dark theme (dark background, white text, red accents #dc2626). Each slide should be a full-viewport section. Include navigation with arrow keys and click. Do NOT use any external dependencies. Return ONLY the HTML code, no explanation.`,
+        'presentation',
         `Create a ${slideCount}-slide HTML presentation based on this script:\n\n${script.slice(0, 6000)}\n\nSlide guidelines:\n- Slide 1: Title slide with the video topic\n- Middle slides: One key point per slide with a short bullet or visual text\n- Last slide: CTA / closing\n- Keep text large and minimal (max 3-4 lines per slide)\n- Add slide numbers\n- Use subtle animations/transitions between slides`
       )
       // Extract HTML from the response (may be wrapped in code blocks)
@@ -234,7 +235,7 @@ Video: "${videoTitle}"\n\nTranscript:\n${transcript.slice(0, 6000)}`
     setSlideChat('')
     try {
       const result = await streamChat(
-        `You are a presentation designer. You will receive the current HTML presentation and a user request to modify it. Return ONLY the complete updated HTML file with the changes applied. No explanation, no code blocks, just the raw HTML. Keep all existing styles, navigation, and structure unless the user asks to change them.`,
+        'presentation-edit',
         `Here is the current HTML presentation:\n\n${presentation}\n\nUser request: ${userRequest}`
       )
       // Extract HTML
@@ -270,7 +271,7 @@ Video: "${videoTitle}"\n\nTranscript:\n${transcript.slice(0, 6000)}`
     setError('')
     try {
       const result = await streamChat(
-        'You are a YouTube title strategist. Return ONLY a numbered list of 10 titles, one per line. No extra text, no explanations, no headers. Just "1. Title here" format.',
+        'titles',
         `Generate 10 compelling YouTube title ideas for this video. They should be similar in style to: "${videoTitle}"\n\nScript topic: ${myTopic}\n\nScript excerpt:\n${script.slice(0, 2000)}\n\nRules:\n- Each title under 60 characters\n- Curiosity-driven, high CTR\n- Credit repair / business funding / finance niche\n- Return ONLY the numbered list, nothing else`
       )
       setTitles(result)
@@ -426,9 +427,8 @@ Video: "${videoTitle}"\n\nTranscript:\n${transcript.slice(0, 6000)}`
                       setLoading(true)
                       setError('')
                       try {
-                        const res = await fetch('/api/transcript', {
+                        const res = await authFetch('/api/transcript', {
                           method: 'POST',
-                          headers: { 'Content-Type': 'application/json' },
                           body: JSON.stringify({ videoUrl: video.url }),
                         })
                         const data = await res.json()

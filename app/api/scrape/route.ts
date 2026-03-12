@@ -1,10 +1,22 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { ApifyClient } from 'apify-client'
 import { VideoResult } from '@/types/youtube'
+import { getAuthUser, unauthorized } from '@/lib/auth'
+import { rateLimit, rateLimitResponse } from '@/lib/rate-limit'
 
 const client = new ApifyClient({ token: process.env.APIFY_TOKEN })
 
 export async function POST(req: NextRequest) {
+  if (!process.env.APIFY_TOKEN) {
+    return NextResponse.json({ error: 'APIFY_TOKEN is not configured' }, { status: 500 })
+  }
+
+  const user = await getAuthUser(req)
+  if (!user) return unauthorized()
+
+  const { ok } = rateLimit(user.id)
+  if (!ok) return rateLimitResponse()
+
   const {
     keyword,
     maxResults = 20,
@@ -16,10 +28,6 @@ export async function POST(req: NextRequest) {
 
   if (!keyword || typeof keyword !== 'string' || !keyword.trim()) {
     return NextResponse.json({ error: 'keyword is required' }, { status: 400 })
-  }
-
-  if (!process.env.APIFY_TOKEN) {
-    return NextResponse.json({ error: 'APIFY_TOKEN is not configured' }, { status: 500 })
   }
 
   const allowedSortBy = ['relevance', 'date', 'views', 'rating']

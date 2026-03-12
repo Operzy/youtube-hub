@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { VideoResult } from '@/types/youtube'
+import { authFetch } from '@/lib/api-client'
 
 interface Props {
   onResults: (results: VideoResult[], keyword: string) => void
@@ -58,9 +59,8 @@ export default function SearchForm({ onResults, onError, onLoading, loading }: P
     onLoading(true)
 
     try {
-      const res = await fetch('/api/scrape', {
+      const res = await authFetch('/api/scrape', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           keyword: kw,
           maxResults,
