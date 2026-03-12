@@ -13,8 +13,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Credit Coach Q YouTube Hub",
-  description: "YouTube research & content planning for Credit Coach Q",
+  title: "YouTube Hub",
+  description: "YouTube research & content planning dashboard",
 };
 
 export default function RootLayout({
