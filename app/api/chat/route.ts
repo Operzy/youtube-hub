@@ -20,7 +20,12 @@ export async function POST(req: NextRequest) {
   const { ok } = rateLimit(user.id)
   if (!ok) return rateLimitResponse()
 
-  const { messages, promptType } = await req.json()
+  const body = await req.json()
+  // Sanitize: remove unpaired Unicode surrogates that break JSON for the API
+  const sanitized = JSON.parse(
+    JSON.stringify(body).replace(/[\uD800-\uDFFF]/g, '')
+  )
+  const { messages, promptType } = sanitized
 
   if (!messages?.length) {
     return new Response(JSON.stringify({ error: 'messages are required' }), {
