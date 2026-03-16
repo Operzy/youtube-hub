@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
-import { ContentProject } from '@/types/youtube'
+import { ContentProject, ScoreItem, ComparisonResult } from '@/types/youtube'
 import { authFetch } from '@/lib/api-client'
 
 function mapRow(r: Record<string, unknown>): ContentProject {
@@ -14,6 +14,13 @@ function mapRow(r: Record<string, unknown>): ContentProject {
     presentation: r.presentation as string,
     titles: (r.titles as string[]) || [],
     savedAt: r.saved_at as string,
+    sourceTranscript: (r.source_transcript as string) || undefined,
+    sourceScores: (r.source_scores as ScoreItem[]) || undefined,
+    myVideoUrl: (r.my_video_url as string) || undefined,
+    myVideoTitle: (r.my_video_title as string) || undefined,
+    myTranscript: (r.my_transcript as string) || undefined,
+    myScores: (r.my_scores as ScoreItem[]) || undefined,
+    comparisonResult: (r.comparison_result as ComparisonResult) || undefined,
   }
 }
 
@@ -51,6 +58,34 @@ export function useContentLibrary() {
     return tempId
   }, [])
 
+  const updateProject = useCallback(async (id: string, fields: Partial<ContentProject>) => {
+    // Optimistic update
+    setProjects(prev => prev.map(p => p.id === id ? { ...p, ...fields } : p))
+
+    // Convert camelCase to snake_case for the API
+    const body: Record<string, unknown> = { id }
+    if (fields.myVideoUrl !== undefined) body.my_video_url = fields.myVideoUrl
+    if (fields.myVideoTitle !== undefined) body.my_video_title = fields.myVideoTitle
+    if (fields.myTranscript !== undefined) body.my_transcript = fields.myTranscript
+    if (fields.myScores !== undefined) body.my_scores = fields.myScores
+    if (fields.comparisonResult !== undefined) body.comparison_result = fields.comparisonResult
+    if (fields.sourceTranscript !== undefined) body.source_transcript = fields.sourceTranscript
+    if (fields.sourceScores !== undefined) body.source_scores = fields.sourceScores
+
+    try {
+      const res = await authFetch('/api/content-projects', {
+        method: 'PATCH',
+        body: JSON.stringify(body),
+      })
+      if (res.ok) {
+        const row = await res.json()
+        setProjects(prev => prev.map(p => p.id === id ? mapRow(row) : p))
+      }
+    } catch {
+      // Revert on failure would be ideal but keep simple for now
+    }
+  }, [])
+
   const deleteProject = useCallback((id: string) => {
     setProjects(prev => prev.filter(p => p.id !== id))
 
@@ -60,5 +95,5 @@ export function useContentLibrary() {
     }).catch(() => {})
   }, [])
 
-  return { projects, saveProject, deleteProject }
+  return { projects, saveProject, updateProject, deleteProject }
 }

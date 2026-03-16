@@ -25,6 +25,28 @@ export interface CalendarEntry {
   sourceUrl?: string
 }
 
+export interface ScoreItem {
+  label: string
+  score: number
+  summary: string
+  improvements: string[]
+}
+
+export interface ComparisonDimension {
+  label: string
+  referenceScore: number
+  myScore: number
+  delta: number
+  summary: string
+  improvements: string[]
+}
+
+export interface ComparisonResult {
+  dimensions: ComparisonDimension[]
+  overallSummary: string
+  comparedAt: string
+}
+
 export interface ContentProject {
   id: string
   title: string
@@ -34,4 +56,11 @@ export interface ContentProject {
   presentation: string
   titles: string[]
   savedAt: string
+  sourceTranscript?: string
+  sourceScores?: ScoreItem[]
+  myVideoUrl?: string
+  myVideoTitle?: string
+  myTranscript?: string
+  myScores?: ScoreItem[]
+  comparisonResult?: ComparisonResult
 }

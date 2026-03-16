@@ -20,6 +20,19 @@ function extractText(val: unknown): string | null {
   return null
 }
 
+function str(val: unknown): string | null {
+  return typeof val === 'string' && val.trim() ? val.trim() : null
+}
+
+function num(val: unknown): number | null {
+  if (typeof val === 'number') return val
+  if (typeof val === 'string') {
+    const n = parseInt(val, 10)
+    return isNaN(n) ? null : n
+  }
+  return null
+}
+
 export async function POST(req: NextRequest) {
   const user = await getAuthUser(req)
   if (!user) return unauthorized()
@@ -67,7 +80,21 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    return NextResponse.json({ transcript })
+    // Extract video metadata from the actor response
+    const title = str(item.title) || str(item.videoTitle) || null
+    const channelName = str(item.channelName) || str(item.channel) || str(item.author) || null
+    const viewCount = num(item.viewCount) || num(item.views) || null
+    const thumbnailUrl = str(item.thumbnailUrl) || str(item.thumbnail) || null
+    const uploadDate = str(item.uploadDate) || str(item.publishedAt) || str(item.date) || null
+
+    return NextResponse.json({
+      transcript,
+      title,
+      channelName,
+      viewCount,
+      thumbnailUrl,
+      uploadDate,
+    })
   } catch (err) {
     console.error('Transcript scrape error:', err)
     const message = err instanceof Error ? err.message : 'Scraping failed'

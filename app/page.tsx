@@ -10,6 +10,7 @@ import LibraryView from '@/components/LibraryView'
 import ContentCalendar from '@/components/ContentCalendar'
 import KanbanBoard from '@/components/KanbanBoard'
 import CreatorHub from '@/components/CreatorHub'
+import ComparisonView from '@/components/ComparisonView'
 import { useSavedVideos } from '@/hooks/useSavedVideos'
 import { useCalendar } from '@/hooks/useCalendar'
 import { useContentLibrary } from '@/hooks/useContentLibrary'
@@ -24,15 +25,17 @@ function outlierScore(v: VideoResult): number {
   return v.viewCount / v.subscriberCount
 }
 
-function ContentLibraryTab({ projects, onDelete, onAddToCalendar }: {
+function ContentLibraryTab({ projects, onDelete, onUpdate, onAddToCalendar }: {
   projects: ContentProject[]
   onDelete: (id: string) => void
+  onUpdate: (id: string, fields: Partial<ContentProject>) => Promise<void>
   onAddToCalendar: (entry: Omit<CalendarEntry, 'id'>) => void
 }) {
   const [boardFormId, setBoardFormId] = useState<string | null>(null)
   const [boardStatus, setBoardStatus] = useState<CalendarStatus>('scripting')
   const [boardDate, setBoardDate] = useState('')
   const [addedIds, setAddedIds] = useState<Set<string>>(new Set())
+  const [compareId, setCompareId] = useState<string | null>(null)
 
   if (projects.length === 0) {
     return (
@@ -75,6 +78,20 @@ function ContentLibraryTab({ projects, onDelete, onAddToCalendar }: {
                   Add to Board
                 </button>
               )}
+              <button
+                onClick={() => {
+                  setCompareId(compareId === project.id ? null : project.id)
+                }}
+                className={`rounded-lg border px-2.5 py-1 text-xs font-medium transition ${
+                  compareId === project.id
+                    ? 'border-red-300 bg-red-50 text-red-600'
+                    : project.comparisonResult
+                      ? 'border-green-200 text-green-600 hover:border-green-300'
+                      : 'border-gray-200 text-gray-500 hover:text-red-600 hover:border-red-200'
+                }`}
+              >
+                {project.comparisonResult ? 'View Comparison' : 'Compare'}
+              </button>
               <button
                 onClick={() => onDelete(project.id)}
                 className="rounded-lg border border-gray-200 px-2.5 py-1 text-xs text-gray-400 hover:text-red-600 hover:border-red-200 transition"
@@ -133,6 +150,10 @@ function ContentLibraryTab({ projects, onDelete, onAddToCalendar }: {
                 Cancel
               </button>
             </div>
+          )}
+
+          {compareId === project.id && (
+            <ComparisonView project={project} onUpdate={onUpdate} />
           )}
 
           <div className="grid gap-3 sm:grid-cols-3">
@@ -206,7 +227,7 @@ function Dashboard({ onSignOut }: { onSignOut: () => void }) {
 
   const { saved, saveVideo, unsaveVideo, isSaved } = useSavedVideos()
   const { entries, addEntry, updateEntry, deleteEntry } = useCalendar()
-  const { projects, saveProject, deleteProject } = useContentLibrary()
+  const { projects, saveProject, updateProject, deleteProject } = useContentLibrary()
 
   function handleResults(results: VideoResult[], searchedKeyword: string) {
     setVideos(results)
@@ -469,6 +490,7 @@ function Dashboard({ onSignOut }: { onSignOut: () => void }) {
           <ContentLibraryTab
             projects={projects}
             onDelete={deleteProject}
+            onUpdate={updateProject}
             onAddToCalendar={addEntry}
           />
         )}

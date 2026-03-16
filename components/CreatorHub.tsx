@@ -1,17 +1,10 @@
 'use client'
 
 import { useState, useRef, useEffect } from 'react'
-import { SavedVideo, ContentProject, CalendarEntry, CalendarStatus } from '@/types/youtube'
+import { SavedVideo, ContentProject, CalendarEntry, CalendarStatus, ScoreItem } from '@/types/youtube'
 import { authFetch } from '@/lib/api-client'
 
 type Step = 'select' | 'transcript' | 'analyze' | 'script' | 'presentation' | 'titles' | 'finish'
-
-interface ScoreItem {
-  label: string
-  score: number
-  summary: string
-  improvements: string[]
-}
 
 interface Props {
   saved: SavedVideo[]
@@ -79,6 +72,7 @@ export default function CreatorHub({ saved, onSaveProject, onAddToCalendar, pend
         .then(data => {
           if (data.error) throw new Error(data.error)
           setTranscript(data.transcript)
+          if (!pendingVideo?.title && data.title) setVideoTitle(data.title)
           setStep('transcript')
         })
         .catch(err => setError(err instanceof Error ? err.message : 'Failed to fetch transcript'))
@@ -115,6 +109,8 @@ export default function CreatorHub({ saved, onSaveProject, onAddToCalendar, pend
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || 'Failed to fetch transcript')
       setTranscript(data.transcript)
+      // Set metadata from transcript response if we don't already have it
+      if (!videoTitle && data.title) setVideoTitle(data.title)
       setStep('transcript')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to fetch transcript')
@@ -340,6 +336,8 @@ Video: "${videoTitle}"\n\nTranscript:\n${transcript.slice(0, 6000)}`
       script,
       presentation,
       titles: titlesList,
+      sourceTranscript: transcript,
+      sourceScores: scores,
     })
     setProjectSaved(true)
   }
