@@ -1,7 +1,30 @@
 'use client'
 
-import { useMemo, useState, useEffect } from 'react'
+import { useMemo, useState, useEffect, useCallback } from 'react'
 import { CalendarEntry, CalendarStatus, ContentProject, PostingGoals } from '@/types/youtube'
+import { authFetch } from '@/lib/api-client'
+
+interface YouTubeVideoData {
+  id: string
+  title: string
+  publishedAt: string
+  thumbnailUrl: string
+  viewCount: number
+  likeCount: number
+  commentCount: number
+  durationSeconds: number
+  videoType: 'short' | 'long'
+}
+
+interface YouTubeChannelData {
+  id: string
+  title: string
+  customUrl: string
+  thumbnailUrl: string
+  subscriberCount: number
+  viewCount: number
+  videoCount: number
+}
 
 interface Props {
   entries: CalendarEntry[]
@@ -9,6 +32,7 @@ interface Props {
   onGoToCalendar: () => void
   onGoToCreatorHub: () => void
   onGoToSearch: () => void
+  onGoToAnalytics: () => void
 }
 
 const STATUS_META: Record<CalendarStatus, { label: string; color: string; bg: string; emoji: string }> = {
@@ -78,14 +102,103 @@ function ProgressRing({ progress, size = 70, strokeWidth = 5, color = '#dc2626',
   )
 }
 
-export default function HomeDashboard({ entries, projects, onGoToCalendar, onGoToCreatorHub, onGoToSearch }: Props) {
+function formatNumber(n: number): string {
+  if (n >= 1_000_000) return (n / 1_000_000).toFixed(1) + 'M'
+  if (n >= 1_000) return (n / 1_000).toFixed(1) + 'K'
+  return n.toLocaleString()
+}
+
+function getWeekStartDate(date: Date): Date {
+  const d = new Date(date)
+  const day = d.getDay()
+  d.setDate(d.getDate() - day)
+  d.setHours(0, 0, 0, 0)
+  return d
+}
+
+export default function HomeDashboard({ entries, projects, onGoToCalendar, onGoToCreatorHub, onGoToSearch, onGoToAnalytics }: Props) {
   const [goals, setGoals] = useState<PostingGoals>({ weeklyTarget: 3, monthlyTarget: 12 })
+  const [ytChannel, setYtChannel] = useState<YouTubeChannelData | null>(null)
+  const [ytVideos, setYtVideos] = useState<YouTubeVideoData[]>([])
+  const [ytLoading, setYtLoading] = useState(false)
   const now = new Date()
   const todayStr = toDateStr(now)
 
   useEffect(() => {
     setGoals(loadGoals())
   }, [])
+
+  // Fetch YouTube data from cache or API
+  const fetchYouTube = useCallback(async () => {
+    // Try cache first
+    const cachedData = localStorage.getItem('yt-channel-data')
+    if (cachedData) {
+      try {
+        const parsed = JSON.parse(cachedData)
+        setYtChannel(parsed.channel)
+        setYtVideos(parsed.videos || [])
+        return
+      } catch {}
+    }
+
+    // Fetch fresh
+    setYtLoading(true)
+    try {
+      const res = await authFetch('/api/youtube?handle=creditcoachq')
+      if (res.ok) {
+        const result = await res.json()
+        setYtChannel(result.channel)
+        setYtVideos(result.videos || [])
+        localStorage.setItem('yt-channel-data', JSON.stringify(result))
+        localStorage.setItem('yt-channel-handle', 'creditcoachq')
+        localStorage.setItem('yt-channel-fetched', new Date().toISOString())
+      }
+    } catch {}
+    setYtLoading(false)
+  }, [])
+
+  useEffect(() => {
+    fetchYouTube()
+  }, [fetchYouTube])
+
+  // YouTube weekly/monthly stats
+  const ytStats = useMemo(() => {
+    if (ytVideos.length === 0) return null
+
+    const weekStart = getWeekStartDate(now)
+    const weekStartStr = weekStart.toISOString()
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString()
+
+    const thisWeekVideos = ytVideos.filter(v => v.publishedAt >= weekStartStr)
+    const thisMonthVideos = ytVideos.filter(v => v.publishedAt >= monthStart)
+
+    const weekShorts = thisWeekVideos.filter(v => v.videoType === 'short').length
+    const weekLongs = thisWeekVideos.filter(v => v.videoType === 'long').length
+    const monthShorts = thisMonthVideos.filter(v => v.videoType === 'short').length
+    const monthLongs = thisMonthVideos.filter(v => v.videoType === 'long').length
+
+    const weekViews = thisWeekVideos.reduce((s, v) => s + v.viewCount, 0)
+    const monthViews = thisMonthVideos.reduce((s, v) => s + v.viewCount, 0)
+
+    // Last week for comparison
+    const lastWeekStart = new Date(weekStart)
+    lastWeekStart.setDate(lastWeekStart.getDate() - 7)
+    const lastWeekVideos = ytVideos.filter(v => v.publishedAt >= lastWeekStart.toISOString() && v.publishedAt < weekStartStr)
+    const lastWeekTotal = lastWeekVideos.length
+
+    return {
+      weekShorts,
+      weekLongs,
+      weekTotal: weekShorts + weekLongs,
+      monthShorts,
+      monthLongs,
+      monthTotal: monthShorts + monthLongs,
+      weekViews,
+      monthViews,
+      lastWeekTotal,
+      weekDelta: (weekShorts + weekLongs) - lastWeekTotal,
+    }
+  }, [ytVideos, now])
 
   const stats = useMemo(() => {
     const weekRange = getWeekRange(now)
@@ -231,6 +344,83 @@ export default function HomeDashboard({ entries, projects, onGoToCalendar, onGoT
           </div>
         </div>
       </div>
+
+      {/* YouTube Channel Stats */}
+      {(ytChannel || ytLoading) && (
+        <div className="rounded-xl border border-gray-200 bg-white p-5">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-3">
+              {ytChannel?.thumbnailUrl && (
+                <img src={ytChannel.thumbnailUrl} alt="" className="h-8 w-8 rounded-full" />
+              )}
+              <div>
+                <h3 className="text-sm font-semibold text-gray-900 flex items-center gap-1.5">
+                  {ytChannel?.title || 'Loading...'}
+                  <span className="text-[10px] text-gray-400 font-normal">{ytChannel?.customUrl}</span>
+                </h3>
+                {ytChannel && (
+                  <p className="text-[10px] text-gray-400">
+                    {formatNumber(ytChannel.subscriberCount)} subscribers &middot; {formatNumber(ytChannel.viewCount)} total views
+                  </p>
+                )}
+              </div>
+            </div>
+            <button onClick={onGoToAnalytics} className="text-[11px] text-red-500 hover:text-red-700 font-medium">
+              Full Analytics →
+            </button>
+          </div>
+
+          {ytLoading && !ytStats ? (
+            <div className="flex items-center gap-2 py-2">
+              <div className="h-4 w-4 animate-spin rounded-full border-2 border-red-600 border-t-transparent" />
+              <span className="text-xs text-gray-400">Loading YouTube data...</span>
+            </div>
+          ) : ytStats ? (
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+              {/* This Week Uploads */}
+              <div className="rounded-lg bg-gray-50 p-3">
+                <p className="text-[10px] text-gray-500 uppercase tracking-wide font-medium">This Week</p>
+                <p className="text-xl font-bold text-gray-900 mt-1">{ytStats.weekTotal}</p>
+                <div className="flex items-center gap-2 mt-1">
+                  <span className="text-[10px] text-blue-600 font-medium">{ytStats.weekShorts} shorts</span>
+                  <span className="text-[10px] text-gray-300">|</span>
+                  <span className="text-[10px] text-purple-600 font-medium">{ytStats.weekLongs} long</span>
+                </div>
+                {ytStats.weekDelta !== 0 && (
+                  <p className={`text-[10px] font-medium mt-0.5 ${ytStats.weekDelta > 0 ? 'text-green-600' : 'text-red-500'}`}>
+                    {ytStats.weekDelta > 0 ? '↑' : '↓'} {Math.abs(ytStats.weekDelta)} vs last week
+                  </p>
+                )}
+              </div>
+
+              {/* This Month Uploads */}
+              <div className="rounded-lg bg-gray-50 p-3">
+                <p className="text-[10px] text-gray-500 uppercase tracking-wide font-medium">This Month</p>
+                <p className="text-xl font-bold text-gray-900 mt-1">{ytStats.monthTotal}</p>
+                <div className="flex items-center gap-2 mt-1">
+                  <span className="text-[10px] text-blue-600 font-medium">{ytStats.monthShorts} shorts</span>
+                  <span className="text-[10px] text-gray-300">|</span>
+                  <span className="text-[10px] text-purple-600 font-medium">{ytStats.monthLongs} long</span>
+                </div>
+              </div>
+
+              {/* Week Views */}
+              <div className="rounded-lg bg-gray-50 p-3">
+                <p className="text-[10px] text-gray-500 uppercase tracking-wide font-medium">Week Views</p>
+                <p className="text-xl font-bold text-gray-900 mt-1">{formatNumber(ytStats.weekViews)}</p>
+                <p className="text-[10px] text-gray-400 mt-1">from {ytStats.weekTotal} uploads</p>
+              </div>
+
+              {/* Month Views */}
+              <div className="rounded-lg bg-gray-50 p-3">
+                <p className="text-[10px] text-gray-500 uppercase tracking-wide font-medium">Month Views</p>
+                <p className="text-xl font-bold text-gray-900 mt-1">{formatNumber(ytStats.monthViews)}</p>
+                <p className="text-[10px] text-gray-400 mt-1">from {ytStats.monthTotal} uploads</p>
+              </div>
+            </div>
+          ) : null}
+        </div>
+      )}
 
       {/* Goals + This Week */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">

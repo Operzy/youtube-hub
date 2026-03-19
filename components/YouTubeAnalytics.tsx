@@ -117,6 +117,10 @@ export default function YouTubeAnalytics() {
     if (saved) {
       setHandle(saved)
       setInputHandle(saved)
+    } else {
+      // Default to @creditcoachq
+      setHandle('creditcoachq')
+      setInputHandle('creditcoachq')
     }
     const cachedData = localStorage.getItem('yt-channel-data')
     const cachedTime = localStorage.getItem('yt-channel-fetched')
