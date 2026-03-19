@@ -13,12 +13,13 @@ import ContentPipeline from '@/components/ContentPipeline'
 import YouTubeAnalytics from '@/components/YouTubeAnalytics'
 import CreatorHub from '@/components/CreatorHub'
 import ComparisonView from '@/components/ComparisonView'
+import HomeDashboard from '@/components/HomeDashboard'
 import { useSavedVideos } from '@/hooks/useSavedVideos'
 import { useCalendar } from '@/hooks/useCalendar'
 import { useContentLibrary } from '@/hooks/useContentLibrary'
 import { VideoResult, SavedVideo, CalendarStatus, ContentProject, CalendarEntry } from '@/types/youtube'
 
-type Tab = 'search' | 'library' | 'calendar' | 'creator' | 'content'
+type Tab = 'home' | 'search' | 'library' | 'calendar' | 'creator' | 'content'
 type CalendarView = 'calendar' | 'board'
 type CalendarSection = 'pipeline' | 'youtube'
 type SortMode = 'views' | 'outlier'
@@ -219,7 +220,7 @@ function ContentLibraryTab({ projects, onDelete, onUpdate, onAddToCalendar }: {
 }
 
 function Dashboard({ onSignOut }: { onSignOut: () => void }) {
-  const [tab, setTab] = useState<Tab>('search')
+  const [tab, setTab] = useState<Tab>('home')
   const [videos, setVideos] = useState<VideoResult[]>([])
   const [keyword, setKeyword] = useState('')
   const [loading, setLoading] = useState(false)
@@ -287,8 +288,9 @@ function Dashboard({ onSignOut }: { onSignOut: () => void }) {
         {/* Tabs */}
         <div className="mb-6 border-b border-gray-200">
           <div className="flex gap-0">
-            {(['search', 'library', 'calendar', 'creator', 'content'] as Tab[]).map(t => {
+            {(['home', 'search', 'library', 'calendar', 'creator', 'content'] as Tab[]).map(t => {
               const labelMap: Record<Tab, string> = {
+                home: 'Home',
                 search: 'Search',
                 library: 'Idea Library',
                 calendar: 'Calendar',
@@ -329,6 +331,17 @@ function Dashboard({ onSignOut }: { onSignOut: () => void }) {
             })}
           </div>
         </div>
+
+        {/* HOME TAB */}
+        {tab === 'home' && (
+          <HomeDashboard
+            entries={entries}
+            projects={projects}
+            onGoToCalendar={() => setTab('calendar')}
+            onGoToCreatorHub={() => setTab('creator')}
+            onGoToSearch={() => setTab('search')}
+          />
+        )}
 
         {/* SEARCH TAB */}
         {tab === 'search' && (
