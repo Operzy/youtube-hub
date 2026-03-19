@@ -10,6 +10,7 @@ import LibraryView from '@/components/LibraryView'
 import ContentCalendar from '@/components/ContentCalendar'
 import KanbanBoard from '@/components/KanbanBoard'
 import ContentPipeline from '@/components/ContentPipeline'
+import YouTubeAnalytics from '@/components/YouTubeAnalytics'
 import CreatorHub from '@/components/CreatorHub'
 import ComparisonView from '@/components/ComparisonView'
 import { useSavedVideos } from '@/hooks/useSavedVideos'
@@ -19,6 +20,7 @@ import { VideoResult, SavedVideo, CalendarStatus, ContentProject, CalendarEntry 
 
 type Tab = 'search' | 'library' | 'calendar' | 'creator' | 'content'
 type CalendarView = 'calendar' | 'board'
+type CalendarSection = 'pipeline' | 'youtube'
 type SortMode = 'views' | 'outlier'
 
 function outlierScore(v: VideoResult): number {
@@ -225,6 +227,7 @@ function Dashboard({ onSignOut }: { onSignOut: () => void }) {
   const [sortBy, setSortBy] = useState<SortMode>('views')
   const [pendingSchedule, setPendingSchedule] = useState<SavedVideo | null>(null)
   const [calView, setCalView] = useState<CalendarView>('board')
+  const [calSection, setCalSection] = useState<CalendarSection>('pipeline')
 
   const { saved, saveVideo, unsaveVideo, isSaved } = useSavedVideos()
   const { entries, addEntry, updateEntry, deleteEntry } = useCalendar()
@@ -422,59 +425,92 @@ function Dashboard({ onSignOut }: { onSignOut: () => void }) {
         {/* CALENDAR TAB */}
         {tab === 'calendar' && (
           <>
-            {/* Pipeline Dashboard */}
-            <ContentPipeline entries={entries} />
-
-            {/* View Toggle */}
-            <div className="mt-6 mb-5 flex items-center justify-between">
-              <p className="text-sm text-gray-500 font-medium">
-                {entries.length} {entries.length === 1 ? 'item' : 'items'} in pipeline
-              </p>
-              <div className="flex rounded-lg border border-gray-200 p-0.5">
-                <button
-                  onClick={() => setCalView('board')}
-                  className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition ${
-                    calView === 'board' ? 'bg-red-600 text-white' : 'text-gray-500 hover:text-gray-900'
-                  }`}
-                >
-                  <svg className="h-3.5 w-3.5" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
-                    <rect x="1" y="1" width="4" height="14" rx="1" />
-                    <rect x="6" y="1" width="4" height="14" rx="1" />
-                    <rect x="11" y="1" width="4" height="14" rx="1" />
-                  </svg>
-                  Board
-                </button>
-                <button
-                  onClick={() => setCalView('calendar')}
-                  className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition ${
-                    calView === 'calendar' ? 'bg-red-600 text-white' : 'text-gray-500 hover:text-gray-900'
-                  }`}
-                >
-                  <svg className="h-3.5 w-3.5" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
-                    <rect x="1" y="2" width="14" height="13" rx="1" />
-                    <path d="M1 6h14M5 1v2M11 1v2" />
-                  </svg>
-                  Calendar
-                </button>
-              </div>
+            {/* Section Toggle: Pipeline vs YouTube Analytics */}
+            <div className="mb-5 flex rounded-lg border border-gray-200 p-0.5 w-fit">
+              <button
+                onClick={() => setCalSection('pipeline')}
+                className={`flex items-center gap-1.5 rounded-md px-4 py-2 text-sm font-medium transition ${
+                  calSection === 'pipeline' ? 'bg-red-600 text-white' : 'text-gray-500 hover:text-gray-900'
+                }`}
+              >
+                <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M3 3v18h18" /><path d="M7 16l4-8 4 4 6-6" />
+                </svg>
+                Content Pipeline
+              </button>
+              <button
+                onClick={() => setCalSection('youtube')}
+                className={`flex items-center gap-1.5 rounded-md px-4 py-2 text-sm font-medium transition ${
+                  calSection === 'youtube' ? 'bg-red-600 text-white' : 'text-gray-500 hover:text-gray-900'
+                }`}
+              >
+                <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/>
+                </svg>
+                YouTube Analytics
+              </button>
             </div>
 
-            {calView === 'board' ? (
-              <KanbanBoard
-                entries={entries}
-                onAdd={addEntry}
-                onUpdate={updateEntry}
-                onDelete={deleteEntry}
-              />
-            ) : (
-              <ContentCalendar
-                entries={entries}
-                onAdd={addEntry}
-                onUpdate={updateEntry}
-                onDelete={deleteEntry}
-                pendingVideo={pendingSchedule}
-                onPendingConsumed={() => setPendingSchedule(null)}
-              />
+            {/* Pipeline Dashboard */}
+            {calSection === 'pipeline' && <ContentPipeline entries={entries} />}
+
+            {/* YouTube Analytics */}
+            {calSection === 'youtube' && <YouTubeAnalytics />}
+
+            {/* View Toggle + Board/Calendar (only in pipeline section) */}
+            {calSection === 'pipeline' && (
+              <>
+                <div className="mt-6 mb-5 flex items-center justify-between">
+                  <p className="text-sm text-gray-500 font-medium">
+                    {entries.length} {entries.length === 1 ? 'item' : 'items'} in pipeline
+                  </p>
+                  <div className="flex rounded-lg border border-gray-200 p-0.5">
+                    <button
+                      onClick={() => setCalView('board')}
+                      className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition ${
+                        calView === 'board' ? 'bg-red-600 text-white' : 'text-gray-500 hover:text-gray-900'
+                      }`}
+                    >
+                      <svg className="h-3.5 w-3.5" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
+                        <rect x="1" y="1" width="4" height="14" rx="1" />
+                        <rect x="6" y="1" width="4" height="14" rx="1" />
+                        <rect x="11" y="1" width="4" height="14" rx="1" />
+                      </svg>
+                      Board
+                    </button>
+                    <button
+                      onClick={() => setCalView('calendar')}
+                      className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition ${
+                        calView === 'calendar' ? 'bg-red-600 text-white' : 'text-gray-500 hover:text-gray-900'
+                      }`}
+                    >
+                      <svg className="h-3.5 w-3.5" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
+                        <rect x="1" y="2" width="14" height="13" rx="1" />
+                        <path d="M1 6h14M5 1v2M11 1v2" />
+                      </svg>
+                      Calendar
+                    </button>
+                  </div>
+                </div>
+
+                {calView === 'board' ? (
+                  <KanbanBoard
+                    entries={entries}
+                    onAdd={addEntry}
+                    onUpdate={updateEntry}
+                    onDelete={deleteEntry}
+                  />
+                ) : (
+                  <ContentCalendar
+                    entries={entries}
+                    onAdd={addEntry}
+                    onUpdate={updateEntry}
+                    onDelete={deleteEntry}
+                    pendingVideo={pendingSchedule}
+                    onPendingConsumed={() => setPendingSchedule(null)}
+                  />
+                )}
+              </>
             )}
           </>
         )}
