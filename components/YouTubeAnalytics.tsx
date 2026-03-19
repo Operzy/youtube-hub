@@ -110,7 +110,8 @@ export default function YouTubeAnalytics() {
   const [viewMode, setViewMode] = useState<ViewMode>('overview')
   const [selectedVideo, setSelectedVideo] = useState<string | null>(null)
   const [videoFilter, setVideoFilter] = useState<'all' | 'short' | 'long'>('all')
-  const [videoSort, setVideoSort] = useState<'date' | 'views' | 'engagement'>('date')
+  const [videoSort, setVideoSort] = useState<'date' | 'views' | 'engagement'>('views')
+  const [videosShown, setVideosShown] = useState(30)
 
   useEffect(() => {
     const saved = localStorage.getItem('yt-channel-handle')
@@ -409,7 +410,7 @@ export default function YouTubeAnalytics() {
           ))}
         </div>
         <div className="flex rounded-lg border border-gray-200 p-0.5">
-          {([['overview', 'Overview'], ['weekly', 'Weekly'], ['videos', 'Videos']] as [ViewMode, string][]).map(([mode, label]) => (
+          {([['overview', 'Overview'], ['weekly', 'Weekly']] as [ViewMode, string][]).map(([mode, label]) => (
             <button
               key={mode}
               onClick={() => setViewMode(mode)}
@@ -633,98 +634,145 @@ export default function YouTubeAnalytics() {
       )}
 
       {/* ============ VIDEOS MODE ============ */}
-      {viewMode === 'videos' && (
-        <div className="space-y-4">
-          {/* Filters */}
-          <div className="flex flex-wrap items-center gap-3">
-            <div className="flex rounded-lg border border-gray-200 p-0.5">
-              {([['all', 'All'], ['short', 'Shorts'], ['long', 'Long-Form']] as ['all' | 'short' | 'long', string][]).map(([f, label]) => (
-                <button key={f} onClick={() => setVideoFilter(f)}
-                  className={`rounded-md px-3 py-1.5 text-xs font-medium transition ${videoFilter === f ? 'bg-red-600 text-white' : 'text-gray-500 hover:text-gray-900'}`}>
-                  {label} {f === 'all' ? `(${filteredVideos.length})` : f === 'short' ? `(${shorts.length})` : `(${longs.length})`}
-                </button>
-              ))}
+      {/* ============ ALL VIDEOS (always visible) ============ */}
+      <div className="space-y-4">
+        <div className="rounded-xl border border-gray-200 bg-white p-5">
+          <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+            <h4 className="text-sm font-semibold text-gray-900">All Videos ({displayVideos.length})</h4>
+            <div className="flex flex-wrap items-center gap-3">
+              <div className="flex rounded-lg border border-gray-200 p-0.5">
+                {([['all', 'All'], ['short', 'Shorts'], ['long', 'Long-Form']] as ['all' | 'short' | 'long', string][]).map(([f, label]) => (
+                  <button key={f} onClick={() => { setVideoFilter(f); setVideosShown(30) }}
+                    className={`rounded-md px-3 py-1.5 text-xs font-medium transition ${videoFilter === f ? 'bg-red-600 text-white' : 'text-gray-500 hover:text-gray-900'}`}>
+                    {label} {f === 'all' ? `(${filteredVideos.length})` : f === 'short' ? `(${shorts.length})` : `(${longs.length})`}
+                  </button>
+                ))}
+              </div>
+              <div className="flex rounded-lg border border-gray-200 p-0.5">
+                {([['views', 'Top Views'], ['engagement', 'Top Engagement'], ['date', 'Latest']] as [typeof videoSort, string][]).map(([s, label]) => (
+                  <button key={s} onClick={() => { setVideoSort(s); setVideosShown(30) }}
+                    className={`rounded-md px-3 py-1.5 text-xs font-medium transition ${videoSort === s ? 'bg-red-600 text-white' : 'text-gray-500 hover:text-gray-900'}`}>
+                    {label}
+                  </button>
+                ))}
+              </div>
             </div>
-            <select
-              value={videoSort}
-              onChange={e => setVideoSort(e.target.value as typeof videoSort)}
-              className="rounded-lg border border-gray-200 px-3 py-1.5 text-xs focus:border-red-500 focus:outline-none"
-            >
-              <option value="date">Sort by Date</option>
-              <option value="views">Sort by Views</option>
-              <option value="engagement">Sort by Engagement</option>
-            </select>
-            <span className="text-[11px] text-gray-400">{displayVideos.length} videos</span>
           </div>
 
           {/* Video Grid */}
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {displayVideos.slice(0, 60).map(v => {
+            {displayVideos.slice(0, videosShown).map((v, rank) => {
               const er = engagementRate(v)
               const isExpanded = selectedVideo === v.id
+              const avgViews = filteredVideos.length > 0 ? filteredVideos.reduce((s, vid) => s + vid.viewCount, 0) / filteredVideos.length : 0
+              const isAboveAvg = v.viewCount > avgViews
 
               return (
                 <div
                   key={v.id}
-                  className={`rounded-lg border p-3 cursor-pointer transition-all ${
-                    isExpanded ? 'border-red-300 bg-red-50' : 'border-gray-100 hover:border-gray-200 hover:shadow-sm'
+                  className={`rounded-xl border p-0 overflow-hidden cursor-pointer transition-all ${
+                    isExpanded ? 'border-red-300 shadow-md' : 'border-gray-200 hover:border-gray-300 hover:shadow-sm'
                   }`}
                   onClick={() => setSelectedVideo(isExpanded ? null : v.id)}
                 >
-                  <div className="flex gap-3">
-                    <div className="relative flex-shrink-0">
-                      <img src={v.thumbnailUrl} alt={v.title} className="h-16 w-28 rounded object-cover" />
-                      <span className={`absolute bottom-0.5 right-0.5 rounded px-1 py-0.5 text-[8px] font-bold text-white ${
-                        v.videoType === 'short' ? 'bg-blue-600' : 'bg-purple-600'
-                      }`}>
-                        {v.videoType === 'short' ? 'SHORT' : formatDuration(v.durationSeconds)}
+                  {/* Thumbnail */}
+                  <div className="relative">
+                    <img src={v.thumbnailUrl} alt={v.title} className="w-full h-36 object-cover" />
+                    <span className={`absolute top-2 left-2 rounded px-1.5 py-0.5 text-[9px] font-bold text-white shadow ${
+                      v.videoType === 'short' ? 'bg-blue-600' : 'bg-purple-600'
+                    }`}>
+                      {v.videoType === 'short' ? 'SHORT' : formatDuration(v.durationSeconds)}
+                    </span>
+                    {videoSort === 'views' && rank < 3 && (
+                      <span className="absolute top-2 right-2 rounded-full bg-yellow-400 text-yellow-900 h-6 w-6 flex items-center justify-center text-[10px] font-bold shadow">
+                        #{rank + 1}
+                      </span>
+                    )}
+                    {isAboveAvg && (
+                      <span className="absolute bottom-2 right-2 rounded bg-green-600/90 px-1.5 py-0.5 text-[8px] font-bold text-white">
+                        Above Avg
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Content */}
+                  <div className="p-3">
+                    <p className="text-xs font-medium text-gray-900 line-clamp-2 leading-snug">{v.title}</p>
+                    <p className="text-[10px] text-gray-400 mt-1">{timeAgo(v.publishedAt)}</p>
+
+                    {/* Stats Row */}
+                    <div className="flex items-center gap-3 mt-2 pt-2 border-t border-gray-100">
+                      <div className="flex items-center gap-1" title="Views">
+                        <svg className="h-3 w-3 text-gray-400" viewBox="0 0 24 24" fill="currentColor"><path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z"/></svg>
+                        <span className="text-[10px] font-bold text-gray-700">{formatNumber(v.viewCount)}</span>
+                      </div>
+                      <div className="flex items-center gap-1" title="Likes">
+                        <svg className="h-3 w-3 text-gray-400" viewBox="0 0 24 24" fill="currentColor"><path d="M1 21h4V9H1v12zm22-11c0-1.1-.9-2-2-2h-6.31l.95-4.57.03-.32c0-.41-.17-.79-.44-1.06L14.17 1 7.59 7.59C7.22 7.95 7 8.45 7 9v10c0 1.1.9 2 2 2h9c.83 0 1.54-.5 1.84-1.22l3.02-7.05c.09-.23.14-.47.14-.73v-2z"/></svg>
+                        <span className="text-[10px] font-medium text-gray-600">{formatNumber(v.likeCount)}</span>
+                      </div>
+                      <div className="flex items-center gap-1" title="Comments">
+                        <svg className="h-3 w-3 text-gray-400" viewBox="0 0 24 24" fill="currentColor"><path d="M21.99 4c0-1.1-.89-2-1.99-2H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h14l4 4-.01-18z"/></svg>
+                        <span className="text-[10px] font-medium text-gray-600">{formatNumber(v.commentCount)}</span>
+                      </div>
+                      <span className={`ml-auto text-[10px] font-bold ${er >= 5 ? 'text-green-600' : er >= 2 ? 'text-orange-500' : 'text-gray-400'}`} title="Engagement rate">
+                        {er.toFixed(1)}%
                       </span>
                     </div>
-                    <div className="min-w-0 flex-1">
-                      <p className="text-xs font-medium text-gray-900 line-clamp-2">{v.title}</p>
-                      <p className="text-[10px] text-gray-400 mt-1">{timeAgo(v.publishedAt)}</p>
-                    </div>
-                  </div>
 
-                  <div className="flex items-center gap-3 mt-2 pt-2 border-t border-gray-100">
-                    <div className="flex items-center gap-1">
-                      <svg className="h-3 w-3 text-gray-400" viewBox="0 0 24 24" fill="currentColor"><path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z"/></svg>
-                      <span className="text-[10px] font-medium text-gray-600">{formatNumber(v.viewCount)}</span>
-                    </div>
-                    <div className="flex items-center gap-1">
-                      <svg className="h-3 w-3 text-gray-400" viewBox="0 0 24 24" fill="currentColor"><path d="M1 21h4V9H1v12zm22-11c0-1.1-.9-2-2-2h-6.31l.95-4.57.03-.32c0-.41-.17-.79-.44-1.06L14.17 1 7.59 7.59C7.22 7.95 7 8.45 7 9v10c0 1.1.9 2 2 2h9c.83 0 1.54-.5 1.84-1.22l3.02-7.05c.09-.23.14-.47.14-.73v-2z"/></svg>
-                      <span className="text-[10px] font-medium text-gray-600">{formatNumber(v.likeCount)}</span>
-                    </div>
-                    <div className="flex items-center gap-1">
-                      <svg className="h-3 w-3 text-gray-400" viewBox="0 0 24 24" fill="currentColor"><path d="M21.99 4c0-1.1-.89-2-1.99-2H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h14l4 4-.01-18z"/></svg>
-                      <span className="text-[10px] font-medium text-gray-600">{formatNumber(v.commentCount)}</span>
-                    </div>
-                    <span className={`ml-auto text-[10px] font-bold ${er >= 5 ? 'text-green-600' : er >= 2 ? 'text-orange-500' : 'text-gray-400'}`}>
-                      {er.toFixed(1)}%
-                    </span>
-                  </div>
-
-                  {isExpanded && (
-                    <div className="mt-2 pt-2 border-t border-gray-100 flex items-center justify-between" onClick={e => e.stopPropagation()}>
-                      <div className="text-[10px] text-gray-400">
-                        {new Date(v.publishedAt).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })}
-                        &middot; {formatDuration(v.durationSeconds)}
+                    {/* Expanded Details */}
+                    {isExpanded && (
+                      <div className="mt-3 pt-3 border-t border-gray-100 space-y-2" onClick={e => e.stopPropagation()}>
+                        <div className="grid grid-cols-3 gap-2 text-center">
+                          <div className="rounded-lg bg-gray-50 p-2">
+                            <p className="text-sm font-bold text-gray-900">{formatNumber(v.viewCount)}</p>
+                            <p className="text-[9px] text-gray-400">Views</p>
+                          </div>
+                          <div className="rounded-lg bg-gray-50 p-2">
+                            <p className="text-sm font-bold text-gray-900">{formatNumber(v.likeCount)}</p>
+                            <p className="text-[9px] text-gray-400">Likes</p>
+                          </div>
+                          <div className="rounded-lg bg-gray-50 p-2">
+                            <p className="text-sm font-bold text-gray-900">{formatNumber(v.commentCount)}</p>
+                            <p className="text-[9px] text-gray-400">Comments</p>
+                          </div>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <div className="text-[10px] text-gray-400">
+                            {new Date(v.publishedAt).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })}
+                            &middot; {formatDuration(v.durationSeconds)}
+                            &middot; {er.toFixed(2)}% engagement
+                          </div>
+                          <a href={`https://www.youtube.com/watch?v=${v.id}`} target="_blank" rel="noopener noreferrer"
+                            className="text-[11px] text-red-500 hover:text-red-700 font-medium flex items-center gap-1">
+                            <svg className="h-3 w-3" viewBox="0 0 24 24" fill="currentColor">
+                              <path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/>
+                            </svg>
+                            Watch
+                          </a>
+                        </div>
                       </div>
-                      <a href={`https://www.youtube.com/watch?v=${v.id}`} target="_blank" rel="noopener noreferrer"
-                        className="text-[11px] text-red-500 hover:text-red-700 font-medium">
-                        Watch ↗
-                      </a>
-                    </div>
-                  )}
+                    )}
+                  </div>
                 </div>
               )
             })}
           </div>
-          {displayVideos.length > 60 && (
-            <p className="text-xs text-gray-400 text-center">Showing first 60 of {displayVideos.length} videos</p>
-          )}
+
+          {/* Load More / Show Count */}
+          {displayVideos.length > videosShown ? (
+            <div className="text-center mt-4">
+              <button
+                onClick={() => setVideosShown(prev => prev + 30)}
+                className="rounded-lg border border-gray-200 px-6 py-2 text-xs font-medium text-gray-600 hover:bg-gray-50 hover:border-gray-300 transition"
+              >
+                Load More ({displayVideos.length - videosShown} remaining)
+              </button>
+            </div>
+          ) : displayVideos.length > 0 ? (
+            <p className="text-xs text-gray-400 text-center mt-4">Showing all {displayVideos.length} videos</p>
+          ) : null}
         </div>
-      )}
+      </div>
 
       {error && (
         <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>
