@@ -5,55 +5,58 @@ import { rateLimit, rateLimitResponse } from '@/lib/rate-limit'
 const YT_API_BASE = 'https://www.googleapis.com/youtube/v3'
 const API_KEY = process.env.YOUTUBE_API_KEY
 
-interface YouTubeChannelSnippet {
-  title: string
-  description: string
-  customUrl: string
-  thumbnails: { default: { url: string }; medium: { url: string }; high: { url: string } }
-  publishedAt: string
-  country?: string
-}
-
-interface YouTubeChannelStatistics {
-  viewCount: string
-  subscriberCount: string
-  videoCount: string
-  hiddenSubscriberCount: boolean
-}
-
-interface YouTubeChannelContentDetails {
-  relatedPlaylists: { uploads: string }
-}
-
 interface YouTubeChannelItem {
   id: string
-  snippet: YouTubeChannelSnippet
-  statistics: YouTubeChannelStatistics
-  contentDetails: YouTubeChannelContentDetails
+  snippet: {
+    title: string
+    description: string
+    customUrl: string
+    thumbnails: { default: { url: string }; medium: { url: string }; high: { url: string } }
+    publishedAt: string
+    country?: string
+  }
+  statistics: {
+    viewCount: string
+    subscriberCount: string
+    videoCount: string
+    hiddenSubscriberCount: boolean
+  }
+  contentDetails: {
+    relatedPlaylists: { uploads: string }
+  }
 }
 
-interface YouTubeVideoSnippet {
-  publishedAt: string
-  title: string
-  description: string
-  thumbnails: { default: { url: string }; medium: { url: string }; high: { url: string } }
-}
-
-interface YouTubeVideoStatistics {
-  viewCount: string
-  likeCount: string
-  commentCount: string
-}
-
-interface YouTubeVideoItem {
-  snippet: YouTubeVideoSnippet
+interface PlaylistItem {
   contentDetails: { videoId: string }
+  snippet: { publishedAt: string; title: string }
 }
 
-interface YouTubeVideoDetailItem {
+interface VideoDetailItem {
   id: string
-  snippet: YouTubeVideoSnippet
-  statistics: YouTubeVideoStatistics
+  snippet: {
+    publishedAt: string
+    title: string
+    description: string
+    thumbnails: { default: { url: string }; medium?: { url: string }; high?: { url: string } }
+  }
+  statistics: {
+    viewCount: string
+    likeCount: string
+    commentCount: string
+  }
+  contentDetails: {
+    duration: string
+  }
+}
+
+// Parse ISO 8601 duration (PT1H2M3S) to seconds
+function parseDuration(iso: string): number {
+  const match = iso.match(/PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/)
+  if (!match) return 0
+  const hours = parseInt(match[1] || '0')
+  const minutes = parseInt(match[2] || '0')
+  const seconds = parseInt(match[3] || '0')
+  return hours * 3600 + minutes * 60 + seconds
 }
 
 async function ytFetch(endpoint: string, params: Record<string, string>) {
@@ -68,6 +71,43 @@ async function ytFetch(endpoint: string, params: Record<string, string>) {
     throw new Error(`YouTube API error: ${res.status} ${err}`)
   }
   return res.json()
+}
+
+// Fetch all playlist items with pagination
+async function fetchAllPlaylistItems(playlistId: string): Promise<PlaylistItem[]> {
+  const items: PlaylistItem[] = []
+  let pageToken: string | undefined
+
+  do {
+    const params: Record<string, string> = {
+      part: 'snippet,contentDetails',
+      playlistId,
+      maxResults: '50',
+    }
+    if (pageToken) params.pageToken = pageToken
+
+    const res = await ytFetch('playlistItems', params)
+    items.push(...(res.items || []))
+    pageToken = res.nextPageToken
+  } while (pageToken)
+
+  return items
+}
+
+// Fetch video details in batches of 50
+async function fetchVideoDetails(videoIds: string[]): Promise<VideoDetailItem[]> {
+  const results: VideoDetailItem[] = []
+
+  for (let i = 0; i < videoIds.length; i += 50) {
+    const batch = videoIds.slice(i, i + 50)
+    const res = await ytFetch('videos', {
+      part: 'snippet,statistics,contentDetails',
+      id: batch.join(','),
+    })
+    results.push(...(res.items || []))
+  }
+
+  return results
 }
 
 export async function GET(req: NextRequest) {
@@ -99,7 +139,6 @@ export async function GET(req: NextRequest) {
       })
       channel = channelRes.items?.[0] || null
     } else if (handle) {
-      // Try forHandle first (works for @handles)
       const cleanHandle = handle.replace('@', '')
       const channelRes = await ytFetch('channels', {
         part: 'snippet,statistics,contentDetails',
@@ -130,36 +169,21 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: 'Channel not found' }, { status: 404 })
     }
 
-    // Step 2: Get recent uploads
+    // Step 2: Get ALL uploads from the uploads playlist
     const uploadsPlaylistId = channel.contentDetails.relatedPlaylists.uploads
-    const playlistRes = await ytFetch('playlistItems', {
-      part: 'snippet,contentDetails',
-      playlistId: uploadsPlaylistId,
-      maxResults: '12',
-    })
+    const playlistItems = await fetchAllPlaylistItems(uploadsPlaylistId)
 
-    const videoIds = (playlistRes.items as YouTubeVideoItem[])
-      .map((item: YouTubeVideoItem) => item.contentDetails.videoId)
-      .join(',')
+    // Step 3: Get detailed stats + duration for all videos
+    const videoIds = playlistItems.map(item => item.contentDetails.videoId)
+    const videoDetails = await fetchVideoDetails(videoIds)
 
-    // Step 3: Get video statistics
-    let videos: {
-      id: string
-      title: string
-      publishedAt: string
-      thumbnailUrl: string
-      viewCount: number
-      likeCount: number
-      commentCount: number
-    }[] = []
+    // Step 4: Build video list with type detection
+    const videos = videoDetails.map(v => {
+      const durationSeconds = parseDuration(v.contentDetails.duration)
+      // Shorts are ≤ 60 seconds
+      const videoType: 'short' | 'long' = durationSeconds <= 60 ? 'short' : 'long'
 
-    if (videoIds) {
-      const videosRes = await ytFetch('videos', {
-        part: 'snippet,statistics',
-        id: videoIds,
-      })
-
-      videos = (videosRes.items as YouTubeVideoDetailItem[]).map((v: YouTubeVideoDetailItem) => ({
+      return {
         id: v.id,
         title: v.snippet.title,
         publishedAt: v.snippet.publishedAt,
@@ -167,8 +191,10 @@ export async function GET(req: NextRequest) {
         viewCount: parseInt(v.statistics.viewCount || '0'),
         likeCount: parseInt(v.statistics.likeCount || '0'),
         commentCount: parseInt(v.statistics.commentCount || '0'),
-      }))
-    }
+        durationSeconds,
+        videoType,
+      }
+    })
 
     return NextResponse.json({
       channel: {
@@ -183,7 +209,7 @@ export async function GET(req: NextRequest) {
         videoCount: parseInt(channel.statistics.videoCount || '0'),
         hiddenSubscriberCount: channel.statistics.hiddenSubscriberCount,
       },
-      recentVideos: videos,
+      videos,
     })
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unknown error'
