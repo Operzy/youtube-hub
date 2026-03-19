@@ -47,6 +47,11 @@ export interface ComparisonResult {
   comparedAt: string
 }
 
+export interface PostingGoals {
+  weeklyTarget: number
+  monthlyTarget: number
+}
+
 export interface ContentProject {
   id: string
   title: string

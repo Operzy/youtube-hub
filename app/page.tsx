@@ -9,6 +9,7 @@ import TrendChart from '@/components/TrendChart'
 import LibraryView from '@/components/LibraryView'
 import ContentCalendar from '@/components/ContentCalendar'
 import KanbanBoard from '@/components/KanbanBoard'
+import ContentPipeline from '@/components/ContentPipeline'
 import CreatorHub from '@/components/CreatorHub'
 import ComparisonView from '@/components/ComparisonView'
 import { useSavedVideos } from '@/hooks/useSavedVideos'
@@ -421,9 +422,13 @@ function Dashboard({ onSignOut }: { onSignOut: () => void }) {
         {/* CALENDAR TAB */}
         {tab === 'calendar' && (
           <>
-            <div className="mb-5 flex items-center justify-between">
-              <p className="text-sm text-gray-500">
-                {entries.length} {entries.length === 1 ? 'item' : 'items'} scheduled
+            {/* Pipeline Dashboard */}
+            <ContentPipeline entries={entries} />
+
+            {/* View Toggle */}
+            <div className="mt-6 mb-5 flex items-center justify-between">
+              <p className="text-sm text-gray-500 font-medium">
+                {entries.length} {entries.length === 1 ? 'item' : 'items'} in pipeline
               </p>
               <div className="flex rounded-lg border border-gray-200 p-0.5">
                 <button
